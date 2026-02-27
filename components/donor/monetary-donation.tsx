@@ -289,7 +289,11 @@ export function MonetaryDonation() {
       </Dialog>
 
       {/* Receipt Dialog */}
-      <Dialog open={step === "receipt"} onOpenChange={() => {}}>
+      <Dialog open={step === "receipt"} onOpenChange={(open) => {
+        if (!open) {
+          handleReset()
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
