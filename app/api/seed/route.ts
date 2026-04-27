@@ -8,10 +8,12 @@ import Notification from "@/server/models/Notification";
 import Feedback from "@/server/models/Feedback";
 
 export async function POST() {
+  console.log("SEED: URI:", process.env.MONGODB_URI);
   try {
+    console.log("SEED: connecting to DB...");
     await connectDB();
+    console.log("SEED: connected!");
 
-    // Clear existing data
     await Promise.all([
       User.deleteMany({}),
       MonetaryDonation.deleteMany({}),
@@ -21,7 +23,6 @@ export async function POST() {
       Feedback.deleteMany({}),
     ]);
 
-    // Create admin user with specified credentials
     const admin = await User.create({
       name: "System Admin",
       email: "bsse1504@iit.du.ac.bd",
@@ -30,7 +31,6 @@ export async function POST() {
       password: "morshaline123",
     });
 
-    // Create a welcome notification for admin
     await Notification.create({
       userId: admin._id,
       message: "Welcome to DonateChain! You can now register new donors and volunteers.",
@@ -44,8 +44,9 @@ export async function POST() {
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
+    console.error("SEED FULL ERROR:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("SEED ERROR MESSAGE:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

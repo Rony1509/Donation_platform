@@ -7,7 +7,10 @@ import Task from "@/server/models/Task";
 
 export async function GET() {
   try {
+    console.log("STATS: connecting to DB...");
     await connectDB();
+    console.log("STATS: connected!");
+
     const [
       totalDonors,
       totalVolunteers,
@@ -45,7 +48,9 @@ export async function GET() {
       pendingTasks,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Server error";
+    console.error("STATS FULL ERROR:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("STATS ERROR MESSAGE:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
