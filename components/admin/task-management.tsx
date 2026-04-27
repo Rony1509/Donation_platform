@@ -35,10 +35,14 @@ import {
 import { Plus, MapPin, Clock, Zap } from "lucide-react"
 import type { TaskStatus, Task as TaskType, PhysicalDonation, User } from "@/lib/types"
 
-
+// ─── Module-level cache (split into tasks vs donations) ──────────────────────
 let tasksCache: TaskType[] = []
-let lastFetch = 0
-const CACHE_TTL = 60000
+let donationsCache: PhysicalDonation[] = []
+let volunteersCache: User[] = []
+let lastTaskFetch = 0
+let lastDonationFetch = 0
+const CACHE_TTL = 60000 // 1 minute
+
 const statusColor: Record<TaskStatus, string> = {
   pending: "bg-accent text-accent-foreground",
   "in-progress": "bg-chart-3/20 text-foreground",
@@ -72,41 +76,70 @@ export function TaskManagement() {
   const [autoAssign, setAutoAssign] = useState(true)
   const [loading, setLoading] = useState(false)
 
-const loadData = useCallback(async (forceRefresh = false) => {
-  const now = Date.now()
-  if (!forceRefresh && tasksCache.length > 0 && now - lastFetch < CACHE_TTL) {
-    setTasks(tasksCache)
-    setLoading(false)
-    return
-  }
-  setLoading(true)
-  try {
-    const [t, pd, vols] = await Promise.all([
-      store.getTasks(),
-      store.getPhysicalDonations(),
-      store.getApprovedVolunteers(),
-    ])
-    tasksCache = t
-    lastFetch = Date.now()
-    setTasks(t)
-    const assignedDonationIds = new Set(t.map((task) => task.donationId))
-    setApprovedDonations(pd.filter((d) => d.status === "approved" && !assignedDonationIds.has(d.id)))
-    setApprovedVolunteers(vols)
-  } finally {
-    setLoading(false)
-  }
-}, [])
-// Auto-refresh every 30 seconds without showing loading
-useEffect(() => {
-  const interval = setInterval(() => loadData(false), 30000)
-  return () => clearInterval(interval)
-}, [loadData])
+  // ─── FIX 1: Load ONLY tasks on mount (fast, no donation dependency) ─────────
+  const loadTasks = useCallback(async (forceRefresh = false) => {
+    const now = Date.now()
+    if (!forceRefresh && tasksCache.length > 0 && now - lastTaskFetch < CACHE_TTL) {
+      setTasks(tasksCache)
+      return
+    }
+    setLoading(true)
+    try {
+      const t = await store.getTasks()
+      tasksCache = t
+      lastTaskFetch = Date.now()
+      setTasks(t)
+    } catch {
+      // silent fail — keeps existing tasks visible
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
+  // ─── FIX 2: Load donations+volunteers ONLY when dialog opens (lazy) ──────────
+  const loadDonationsAndVolunteers = useCallback(async (forceRefresh = false) => {
+    const now = Date.now()
+    if (!forceRefresh && donationsCache.length > 0 && now - lastDonationFetch < CACHE_TTL) {
+      const assignedIds = new Set(tasksCache.map((t) => t.donationId))
+      setApprovedDonations(donationsCache.filter((d) => d.status === "approved" && !assignedIds.has(d.id)))
+      setApprovedVolunteers(volunteersCache)
+      return
+    }
+    try {
+      const [pd, vols] = await Promise.all([
+        store.getPhysicalDonations(),
+        store.getApprovedVolunteers(),
+      ])
+      donationsCache = pd
+      volunteersCache = vols
+      lastDonationFetch = Date.now()
+      const assignedIds = new Set(tasksCache.map((t) => t.donationId))
+      setApprovedDonations(pd.filter((d) => d.status === "approved" && !assignedIds.has(d.id)))
+      setApprovedVolunteers(vols)
+    } catch {
+      // silent fail
+    }
+  }, [])
+
+  // ─── Mount: only fetch tasks (instant display) ───────────────────────────────
   useEffect(() => {
-    loadData(true)
-  }, [loadData])
+    loadTasks(false)
+  }, [loadTasks])
 
-  // Load nearest volunteers when a donation is selected
+  // ─── Auto-refresh tasks every 30s (no loading spinner) ───────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => loadTasks(false), 30000)
+    return () => clearInterval(interval)
+  }, [loadTasks])
+
+  // ─── FIX 2 cont: Load donations ONLY when dialog opens ───────────────────────
+  useEffect(() => {
+    if (dialogOpen) {
+      loadDonationsAndVolunteers(false)
+    }
+  }, [dialogOpen, loadDonationsAndVolunteers])
+
+  // ─── Load nearest volunteers when a donation is selected ─────────────────────
   useEffect(() => {
     async function loadNearestVolunteers() {
       if (!selectedDonation || !autoAssign) {
@@ -120,9 +153,6 @@ useEffect(() => {
         return
       }
 
-      // Try to get coordinates from donation or use default Dhaka coordinates
-      // In a real app, we'd geocode the address. For now, we'll use default
-      
       const { getAreaCoordinates } = await import("@/lib/areaCoordinates")
       const donorCoords = getAreaCoordinates(donation.location)
       const lat = donorCoords?.latitude ?? 23.8103
@@ -131,10 +161,7 @@ useEffect(() => {
       setLoadingNearest(true)
       try {
         const volunteers = await store.getNearestVolunteers(lat, lng, 50, 100)
-
         setNearestVolunteers(volunteers)
-        
-        // Auto-select nearest volunteer if available
         if (volunteers.length > 0 && !selectedVolunteer) {
           setSelectedVolunteer(volunteers[0].id)
         }
@@ -149,6 +176,7 @@ useEffect(() => {
     loadNearestVolunteers()
   }, [selectedDonation, autoAssign, approvedDonations])
 
+  // ─── FIX 3: After task create, only refresh tasks — NOT donations ─────────────
   async function handleCreate() {
     if (!selectedDonation || !selectedVolunteer || !deadline) {
       toast.error("Please fill all fields.")
@@ -156,8 +184,8 @@ useEffect(() => {
     }
 
     const distance = selectedVolunteerData?.distanceFormatted
-const estimatedTime = selectedVolunteerData?.estimatedTime
-const task = await store.createTask(selectedDonation, selectedVolunteer, deadline, distance, estimatedTime)
+    const estimatedTime = selectedVolunteerData?.estimatedTime
+    const task = await store.createTask(selectedDonation, selectedVolunteer, deadline, distance, estimatedTime)
 
     if (task) {
       toast.success("Task assigned successfully.")
@@ -165,7 +193,13 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
       setSelectedDonation("")
       setSelectedVolunteer("")
       setDeadline("")
-      loadData(true)
+
+      // Invalidate donations cache so next dialog open fetches fresh data
+      lastDonationFetch = 0
+      donationsCache = []
+
+      // Only refresh tasks table — no donations reload
+      await loadTasks(true)
     }
   }
 
@@ -203,8 +237,8 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
                   <p className="font-medium text-foreground">Smart Volunteer Assignment</p>
                   <p className="text-sm text-muted-foreground">Automatically find the nearest volunteer</p>
                 </div>
-                <Button 
-                  variant={autoAssign ? "default" : "outline"} 
+                <Button
+                  variant={autoAssign ? "default" : "outline"}
                   size="sm"
                   onClick={() => setAutoAssign(!autoAssign)}
                 >
@@ -242,8 +276,8 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
                         <div
                           key={v.id}
                           className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                            selectedVolunteer === v.id 
-                              ? "border-primary bg-primary/5" 
+                            selectedVolunteer === v.id
+                              ? "border-primary bg-primary/5"
                               : "border-border hover:border-primary/50"
                           }`}
                           onClick={() => setSelectedVolunteer(v.id)}
@@ -300,15 +334,13 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
               {selectedDonationData && selectedVolunteerData && (
                 <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
                   <p className="text-sm font-medium text-foreground">Assignment Summary</p>
-
-
                   <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p className="text-muted-foreground">Pickup:</p>
                       <p className="font-medium">{selectedDonationData.type}</p>
                     </div>
                     <div>
-                       <p className="text-muted-foreground">From (Donor):</p>
+                      <p className="text-muted-foreground">From (Donor):</p>
                       <p className="font-medium">{selectedDonationData.location}</p>
                     </div>
                     <div>
@@ -323,19 +355,13 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
                       <p className="text-muted-foreground">Phone (Donor):</p>
                       <p className="font-medium">{selectedDonationData.phone || "—"}</p>
                     </div>
-
-                  <div>
+                    <div>
                       <p className="text-muted-foreground">Estimated Time:</p>
                       <p className="font-medium">{selectedVolunteerData.estimatedTime}</p>
                     </div>
                   </div>
-
-                  
-
                 </div>
               )}
-                  
-
 
               <div className="flex flex-col gap-2">
                 <Label>Deadline</Label>
@@ -356,15 +382,13 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
           <CardTitle className="text-lg">All Tasks</CardTitle>
         </CardHeader>
         <CardContent>
-          
-
           {loading ? (
-  <p className="py-8 text-center text-muted-foreground">Loading tasks...</p>
-) : tasks.length === 0 ? (
-  <p className="py-8 text-center text-muted-foreground">
-    No tasks created yet
-  </p>
-) : (
+            <p className="py-8 text-center text-muted-foreground">Loading tasks...</p>
+          ) : tasks.length === 0 ? (
+            <p className="py-8 text-center text-muted-foreground">
+              No tasks created yet
+            </p>
+          ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -393,38 +417,35 @@ const task = await store.createTask(selectedDonation, selectedVolunteer, deadlin
                             : t.status.charAt(0).toUpperCase() + t.status.slice(1)}
                         </Badge>
                       </TableCell>
-
-                        <TableCell>
-  {t.pickupPhotoUrl || t.deliveryPhotoUrl || t.proofPhotoUrl ? (
-    <button
-      className="text-sm text-primary underline hover:opacity-80"
-      onClick={() => {
-        const url = t.pickupPhotoUrl || t.deliveryPhotoUrl || t.proofPhotoUrl;
-        if (!url) return;
-        if (url.startsWith("data:")) {
-          const [header, data] = url.split(",");
-          const mime = header.match(/:(.*?);/)?.[1] || "image/jpeg";
-          const byteChars = atob(data);
-          const byteArr = new Uint8Array(byteChars.length);
-          for (let i = 0; i < byteChars.length; i++) {
-            byteArr[i] = byteChars.charCodeAt(i);
-          }
-          const blob = new Blob([byteArr], { type: mime });
-          const blobUrl = URL.createObjectURL(blob);
-          window.open(blobUrl, "_blank");
-        } else {
-          window.open(url, "_blank");
-        }
-      }}
-    >
-      View Photo
-    </button>
-  ) : (
-    <span className="text-sm text-muted-foreground">None</span>
-  )}
-</TableCell>
-
-
+                      <TableCell>
+                        {t.pickupPhotoUrl || t.deliveryPhotoUrl || t.proofPhotoUrl ? (
+                          <button
+                            className="text-sm text-primary underline hover:opacity-80"
+                            onClick={() => {
+                              const url = t.pickupPhotoUrl || t.deliveryPhotoUrl || t.proofPhotoUrl;
+                              if (!url) return;
+                              if (url.startsWith("data:")) {
+                                const [header, data] = url.split(",");
+                                const mime = header.match(/:(.*?);/)?.[1] || "image/jpeg";
+                                const byteChars = atob(data);
+                                const byteArr = new Uint8Array(byteChars.length);
+                                for (let i = 0; i < byteChars.length; i++) {
+                                  byteArr[i] = byteChars.charCodeAt(i);
+                                }
+                                const blob = new Blob([byteArr], { type: mime });
+                                const blobUrl = URL.createObjectURL(blob);
+                                window.open(blobUrl, "_blank");
+                              } else {
+                                window.open(url, "_blank");
+                              }
+                            }}
+                          >
+                            View Photo
+                          </button>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">None</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

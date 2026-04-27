@@ -1,8 +1,4 @@
 import crypto from "crypto";
-
-// A simple blockchain implementation for donation transaction recording.
-// Each block contains a donation transaction and is chained via hashes.
-
 class Block {
   constructor(index, timestamp, data, previousHash = "") {
     this.index = index;
@@ -34,13 +30,12 @@ class Block {
   }
 }
 }
-
 class Blockchain {
   constructor() {
     this.chain = [this.createGenesisBlock()];
     this.difficulty = 0;
   }
-
+  
   createGenesisBlock() {
     return new Block(0, new Date().toISOString(), { type: "genesis" }, "0");
   }
@@ -57,6 +52,9 @@ class Blockchain {
       data,
       previousBlock.hash
     );
+
+
+
     newBlock.mineBlock(this.difficulty);
     this.chain.push(newBlock);
     return newBlock;

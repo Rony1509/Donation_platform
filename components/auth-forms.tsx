@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label"
 import { KeyRound, ArrowLeft, CheckCircle2 } from "lucide-react"
 import { type AuthMode } from "@/components/auth-modal"
 
-export function ForgotPasswordForm({ onModeChange }: { onModeChange: (m: AuthMode) => void }) {
+export function ForgotPasswordForm({ onModeChange, role = "" }: { onModeChange: (m: AuthMode) => void; role?: string }) {
   const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -24,7 +24,7 @@ export function ForgotPasswordForm({ onModeChange }: { onModeChange: (m: AuthMod
     setError("")
     setLoading(true)
     try {
-      const result = await store.forgotPassword(email)
+      const result = await store.forgotPassword(email, role)
       if (result.success && result.userId) {
         // Store the userId and email in sessionStorage for the reset step
         sessionStorage.setItem("reset_user_id", result.userId)

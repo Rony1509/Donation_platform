@@ -117,6 +117,9 @@ export function LandingPage() {
         contactForm.email,
         contactForm.message
       )
+
+
+      
       if (result.success) {
         toast.success("Message sent successfully! We'll respond within 24 hours.")
         setContactForm({ name: "", email: "", message: "" })

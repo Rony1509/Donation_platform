@@ -44,8 +44,6 @@ const taskSchema = new mongoose.Schema(
 taskSchema.index({ createdAt: -1 });
 taskSchema.index({ volunteerId: 1 });
 taskSchema.index({ donationId: 1 });
-
-
 const Task = mongoose.models.Task || mongoose.model("Task", taskSchema);
 
 export default Task;

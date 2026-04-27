@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-
 const physicalDonationSchema = new mongoose.Schema(
   {
     donorId: {

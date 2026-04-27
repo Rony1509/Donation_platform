@@ -408,13 +408,14 @@ export const store = {
   },
 
   // Forgot / Reset Password
-  async forgotPassword(email: string): Promise<{ success: boolean; userId?: string; userName?: string; error?: string }> {
-    try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      })
+  
+      async forgotPassword(email: string, role?: string): Promise<{ success: boolean; userId?: string; userName?: string; error?: string }> {
+  try {
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, role }),
+    })
       const data = await res.json()
       if (!res.ok) {
         return { success: false, error: data.error }

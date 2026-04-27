@@ -5,8 +5,7 @@ import { useAuth } from "@/lib/auth-context"
 import { store } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { DollarSign, Package, Star, TrendingUp, Heart, Users, CheckCircle } from "lucide-react"
+import { DollarSign, Package, Star, TrendingUp } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -73,21 +72,6 @@ export function DonorOverview() {
 
   const totalDonated = monetaryDonations.reduce((s, d) => s + d.amount, 0)
   const totalItems = physicalDonations.reduce((s, d) => s + d.quantity, 0)
-  const estimatedBeneficiaries = Math.floor(totalDonated / 500)
-  const nextMilestone = 10000
-  const progressToNext = Math.min((totalDonated / nextMilestone) * 100, 100)
-
-  const milestones = [
-    { name: "Bronze", threshold: 1000, icon: "🥉" },
-    { name: "Silver", threshold: 5000, icon: "🥈" },
-    { name: "Gold", threshold: 10000, icon: "🥇" },
-    { name: "Platinum", threshold: 25000, icon: "💎" },
-    { name: "Diamond", threshold: 50000, icon: "💠" },
-  ]
-
-  const currentMilestone = milestones.find((m) => totalDonated < m.threshold) || milestones[milestones.length - 1]
-  const milestoneIndex = milestones.findIndex((m) => m.name === currentMilestone.name)
-  const nextMilestoneName = currentMilestone.name
 
   if (loading) {
     return <div className="py-8 text-center text-muted-foreground">Loading...</div>
@@ -99,35 +83,6 @@ export function DonorOverview() {
         <h1 className="text-2xl font-bold text-foreground">Welcome, {user.name}</h1>
         <p className="text-muted-foreground">Your donation activity at a glance</p>
       </div>
-
-      {/* Impact Meter */}
-      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-primary/10">
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Heart className="h-5 w-5 text-primary" />
-            Your Impact
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-6">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-primary/30 bg-primary/10">
-              <Users className="h-8 w-8 text-primary" />
-            </div>
-            <div className="flex-1">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-3xl font-bold text-primary">{estimatedBeneficiaries}</span>
-                <span className="text-sm text-muted-foreground">people helped</span>
-              </div>
-              <Progress value={progressToNext} className="h-3" />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {nextMilestone - totalDonated > 0
-                  ? `৳${(nextMilestone - totalDonated).toLocaleString()} more to reach ${nextMilestoneName}`
-                  : `You've reached ${nextMilestoneName} level!`}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -195,7 +150,6 @@ export function DonorOverview() {
         </Card>
       </div>
 
-      {/* My Donation History - Bar Chart */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">My Donation History</CardTitle>
@@ -226,9 +180,6 @@ export function DonorOverview() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Recent donations */}
-     
     </div>
   )
 }
